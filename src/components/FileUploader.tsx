@@ -13,94 +13,89 @@ export default function FileUploader() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const processFile = async (file: File) => {
+  const processFiles = async (files: File[]) => {
     setIsProcessing(true);
     setError(null);
     try {
-      if (file.name.endsWith('.zip')) {
-        await processZip(file);
-      } else if (file.name.endsWith('.csv')) {
-        await processCSV(file, file.name);
+      let daySummaryContent = '';
+      let heartRateContent = '';
+      let sleepStageContent = '';
+      let sleepContent = '';
+
+      // Check if a single ZIP was uploaded
+      const zipFile = files.find(f => f.name.endsWith('.zip'));
+      
+      if (zipFile) {
+        const zip = new JSZip();
+        const loadedZip = await zip.loadAsync(zipFile);
+        
+        const promises: Promise<void>[] = [];
+        loadedZip.forEach((relativePath, zipEntry) => {
+          if (zipEntry.dir) return;
+          const fileName = zipEntry.name;
+          if (fileName.includes('activity.day_summary') && fileName.endsWith('.csv')) {
+            promises.push(zipEntry.async('string').then(c => { daySummaryContent = c; }));
+          } else if (fileName.includes('heart_rate') && !fileName.includes('zone') && fileName.endsWith('.csv')) {
+            promises.push(zipEntry.async('string').then(c => { heartRateContent = c; }));
+          } else if (fileName.includes('sleep_stage') && fileName.endsWith('.csv')) {
+            promises.push(zipEntry.async('string').then(c => { sleepStageContent = c; }));
+          } else if (fileName.includes('sleep') && !fileName.includes('sleep_stage') && fileName.endsWith('.csv')) {
+            promises.push(zipEntry.async('string').then(c => { sleepContent = c; }));
+          }
+        });
+        await Promise.all(promises);
       } else {
-        throw new Error("Unsupported file type. Please upload a .zip or .csv file.");
+        // Unzipped folder or individual files
+        const daySummaryFile = files.find(f => f.name.includes('activity.day_summary') && f.name.endsWith('.csv'));
+        const heartRateFile = files.find(f => f.name.includes('heart_rate') && !f.name.includes('zone') && f.name.endsWith('.csv'));
+        const sleepStageFile = files.find(f => f.name.includes('sleep_stage') && f.name.endsWith('.csv'));
+        const sleepFile = files.find(f => f.name.includes('sleep') && !f.name.includes('sleep_stage') && f.name.endsWith('.csv'));
+
+        if (daySummaryFile) daySummaryContent = await daySummaryFile.text();
+        if (heartRateFile) heartRateContent = await heartRateFile.text();
+        if (sleepStageFile) sleepStageContent = await sleepStageFile.text();
+        if (sleepFile) sleepContent = await sleepFile.text();
       }
+
+      if (!daySummaryContent && !heartRateContent && !sleepContent) {
+        throw new Error("Could not find the necessary Samsung Health CSV files. Did you upload the correct folder or ZIP?");
+      }
+
+      // Parse the content
+      let parsedDaySummaries: DaySummary[] = [];
+      let parsedHeartRates: HeartRate[] = [];
+      let parsedSleepData: SleepData[] = [];
+
+      if (daySummaryContent) parsedDaySummaries = parseDaySummaryCSV(daySummaryContent);
+      if (heartRateContent) parsedHeartRates = parseHeartRateCSV(heartRateContent);
+      
+      // Parse sleep (preferring stage data if available for hyper-accurate architecture)
+      if (sleepStageContent && sleepContent) {
+          parsedSleepData = parseAdvancedSleepData(sleepContent, sleepStageContent);
+      } else if (sleepContent) {
+          parsedSleepData = parseBasicSleepCSV(sleepContent);
+      }
+
+      setHealthData({
+        daySummaries: parsedDaySummaries.length > 0 ? parsedDaySummaries : undefined,
+        heartRates: parsedHeartRates.length > 0 ? parsedHeartRates : undefined,
+        sleepData: parsedSleepData.length > 0 ? parsedSleepData : undefined,
+      });
+
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Failed to process file.");
+      setError(err.message || "Failed to process files.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const processZip = async (file: File) => {
-    const zip = new JSZip();
-    const loadedZip = await zip.loadAsync(file);
-    
-    let parsedDaySummaries: DaySummary[] = [];
-    let parsedHeartRates: HeartRate[] = [];
-    let parsedSleepData: SleepData[] = [];
-
-    const promises: Promise<void>[] = [];
-
-    loadedZip.forEach((relativePath, zipEntry) => {
-      if (zipEntry.dir) return;
-      
-      const fileName = zipEntry.name;
-      
-      if (fileName.includes('com.samsung.shealth.activity.day_summary') && fileName.endsWith('.csv')) {
-        promises.push(zipEntry.async('string').then(content => {
-          parsedDaySummaries = parseDaySummaryCSV(content);
-        }));
-      } else if (fileName.includes('com.samsung.shealth.heart_rate') && fileName.endsWith('.csv')) {
-        promises.push(zipEntry.async('string').then(content => {
-          parsedHeartRates = parseHeartRateCSV(content);
-        }));
-      } else if ((fileName.includes('com.samsung.shealth.sleep') || fileName.includes('sleep_data')) && fileName.endsWith('.csv')) {
-        promises.push(zipEntry.async('string').then(content => {
-          parsedSleepData = parseSleepCSV(content);
-        }));
-      }
-    });
-
-    await Promise.all(promises);
-
-    setHealthData({
-      daySummaries: parsedDaySummaries.length > 0 ? parsedDaySummaries : undefined,
-      heartRates: parsedHeartRates.length > 0 ? parsedHeartRates : undefined,
-      sleepData: parsedSleepData.length > 0 ? parsedSleepData : undefined,
-    });
-  };
-
-  const processCSV = async (file: File, fileName: string) => {
-    const text = await file.text();
-    if (fileName.includes('day_summary')) {
-      setHealthData({ daySummaries: parseDaySummaryCSV(text) });
-    } else if (fileName.includes('heart_rate')) {
-      setHealthData({ heartRates: parseHeartRateCSV(text) });
-    } else if (fileName.includes('sleep')) {
-      setHealthData({ sleepData: parseSleepCSV(text) });
-    } else {
-      throw new Error(`Unrecognized CSV file: ${fileName}`);
-    }
-  };
-
   const parseDaySummaryCSV = (csvContent: string): DaySummary[] => {
-    // Samsung Health CSVs often have an extra metadata row at the very top.
-    // PapaParse might struggle if headers are on row 2. We'll skip empty/metadata lines.
-    const lines = csvContent.split('\n');
-    let startIndex = 0;
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-        if (lines[i].includes('step_count') || lines[i].includes('calorie')) {
-            startIndex = i;
-            break;
-        }
-    }
-    const cleanCsv = lines.slice(startIndex).join('\n');
-
+    const cleanCsv = csvContent.split('\n').slice(1).join('\n'); // Skip metadata row 1
     const result = Papa.parse(cleanCsv, { header: true, skipEmptyLines: true, dynamicTyping: true });
     
     return result.data.map((row: any) => ({
-      date: row.create_time || row.day_time || '',
+      date: row.create_time || row.update_time || '',
       step_count: Number(row.step_count) || 0,
       active_time: Number(row.active_time) || 0,
       calorie: Number(row.calorie) || 0,
@@ -108,15 +103,7 @@ export default function FileUploader() {
   };
 
   const parseHeartRateCSV = (csvContent: string): HeartRate[] => {
-    const lines = csvContent.split('\n');
-    let startIndex = 0;
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-        if (lines[i].includes('heart_rate')) {
-            startIndex = i;
-            break;
-        }
-    }
-    const cleanCsv = lines.slice(startIndex).join('\n');
+    const cleanCsv = csvContent.split('\n').slice(1).join('\n');
     const result = Papa.parse(cleanCsv, { header: true, skipEmptyLines: true, dynamicTyping: true });
     
     return result.data.map((row: any) => ({
@@ -126,67 +113,94 @@ export default function FileUploader() {
     })).filter(item => item.start_time && item.heart_rate > 0);
   };
 
-  const parseSleepCSV = (csvContent: string): SleepData[] => {
-     const lines = csvContent.split('\n');
-    let startIndex = 0;
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-        if (lines[i].includes('start_time')) {
-            startIndex = i;
-            break;
-        }
-    }
-    const cleanCsv = lines.slice(startIndex).join('\n');
+  const parseBasicSleepCSV = (csvContent: string): SleepData[] => {
+    const cleanCsv = csvContent.split('\n').slice(1).join('\n');
     const result = Papa.parse(cleanCsv, { header: true, skipEmptyLines: true, dynamicTyping: true });
     
-    return result.data.map((row: any) => ({
-      start_time: row.start_time || '',
-      end_time: row.end_time || '',
-      // Approximations, real Samsung data varies wildly in structure. 
-      // Sometimes it's in a separate stage file, sometimes it's just efficiency.
-      stage_deep: Number(row.efficiency) ? Math.floor(Number(row.efficiency) * 0.3) : 0, 
-      stage_light: Number(row.efficiency) ? Math.floor(Number(row.efficiency) * 0.5) : 0,
-      stage_rem: Number(row.efficiency) ? Math.floor(Number(row.efficiency) * 0.2) : 0,
-    })).filter(item => item.start_time);
+    return result.data.map((row: any) => {
+        // Fallback approximation if no stage data
+        const start = new Date(row.start_time);
+        const end = new Date(row.end_time);
+        const diffMins = (end.getTime() - start.getTime()) / 60000;
+        
+        return {
+            start_time: row.start_time || '',
+            end_time: row.end_time || '',
+            stage_deep: Math.floor(diffMins * 0.2), 
+            stage_light: Math.floor(diffMins * 0.5),
+            stage_rem: Math.floor(diffMins * 0.2),
+            stage_awake: Math.floor(diffMins * 0.1),
+        };
+    }).filter(item => item.start_time);
+  };
+
+  const parseAdvancedSleepData = (sleepCsv: string, stageCsv: string): SleepData[] => {
+      // Parses sleep.csv for master sessions, then aggregates sleep_stage.csv into those sessions
+      const cleanSleep = sleepCsv.split('\n').slice(1).join('\n');
+      const cleanStage = stageCsv.split('\n').slice(1).join('\n');
+      
+      const sleepResult = Papa.parse(cleanSleep, { header: true, skipEmptyLines: true, dynamicTyping: true });
+      const stageResult = Papa.parse(cleanStage, { header: true, skipEmptyLines: true, dynamicTyping: true });
+
+      // Group stages by sleep_id or date
+      const stageMap: Record<string, any> = {};
+      
+      stageResult.data.forEach((row: any) => {
+          if (!row.sleep_id) return;
+          if (!stageMap[row.sleep_id]) {
+              stageMap[row.sleep_id] = { deep: 0, light: 0, rem: 0, awake: 0 };
+          }
+          
+          const start = new Date(row.start_time).getTime();
+          const end = new Date(row.end_time).getTime();
+          const durationMins = (end - start) / 60000;
+          
+          // Samsung Stage Codes: 40001 (Awake), 40002 (Light), 40003 (Deep), 40004 (REM)
+          if (row.stage === 40001) stageMap[row.sleep_id].awake += durationMins;
+          else if (row.stage === 40002) stageMap[row.sleep_id].light += durationMins;
+          else if (row.stage === 40003) stageMap[row.sleep_id].deep += durationMins;
+          else if (row.stage === 40004) stageMap[row.sleep_id].rem += durationMins;
+          else stageMap[row.sleep_id].light += durationMins; // fallback
+      });
+
+      return sleepResult.data.map((row: any) => {
+          // Use datauuid to match sleep_id
+          const stages = stageMap[row.datauuid] || { deep: 0, light: 0, rem: 0, awake: 0 };
+          return {
+              start_time: row.start_time || '',
+              end_time: row.end_time || '',
+              stage_deep: Math.floor(stages.deep),
+              stage_light: Math.floor(stages.light),
+              stage_rem: Math.floor(stages.rem),
+              stage_awake: Math.floor(stages.awake)
+          }
+      }).filter(item => item.start_time);
   };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
-      // Process the first file if it's a ZIP, or multiple CSVs
-      const zipFile = acceptedFiles.find(f => f.name.endsWith('.zip'));
-      if (zipFile) {
-        processFile(zipFile);
-      } else {
-        acceptedFiles.forEach(f => {
-            if (f.name.endsWith('.csv')) {
-                processFile(f);
-            }
-        })
-      }
+      processFiles(acceptedFiles);
     }
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
     onDrop,
-    accept: {
-      'application/zip': ['.zip'],
-      'text/csv': ['.csv']
-    }
+    // Removed strict accept constraints so unzipped folders can be dropped natively
   });
 
   if (isLoaded && !isProcessing && !error) {
-     // If loaded and no intent to re-upload, we can minimize this
      return (
-        <div className="sci-fi-panel p-4 flex items-center justify-between border-bright-green">
+        <div className="sci-fi-panel p-4 flex flex-col md:flex-row items-center justify-between border-bright-green gap-4">
              <div className="flex items-center gap-3">
                  <CheckCircle2 className="text-bright-green w-5 h-5" />
-                 <span className="text-white font-medium">Data Loaded Successfully</span>
+                 <span className="text-white font-medium">Telemetry Core Loaded Successfully</span>
              </div>
              <button 
                 {...getRootProps()} 
                 className="text-xs uppercase tracking-widest text-electric-blue hover:text-white transition-colors"
              >
                 <input {...getInputProps()} />
-                Upload New Data
+                Upload Different Data
              </button>
         </div>
      )
@@ -206,13 +220,13 @@ export default function FileUploader() {
       {isProcessing ? (
         <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 rounded-full border-4 border-electric-blue border-t-transparent animate-spin" />
-            <p className="text-electric-blue font-medium tracking-widest uppercase">Extracting Telemetry...</p>
+            <p className="text-electric-blue font-medium tracking-widest uppercase">Extracting & Parsing Telemetry...</p>
         </div>
       ) : error ? (
         <div className="flex flex-col items-center gap-4 text-red-500">
             <AlertCircle className="w-12 h-12" />
             <p className="font-medium tracking-wide">{error}</p>
-            <p className="text-xs text-gray-400">Click to try again</p>
+            <p className="text-xs text-gray-400 mt-2">Click to try again</p>
         </div>
       ) : (
         <div className="flex flex-col items-center gap-4">
@@ -222,7 +236,7 @@ export default function FileUploader() {
             <div>
                 <h3 className="text-lg font-bold text-white mb-2">Initialize Data Core</h3>
                 <p className="text-sm text-gray-400 max-w-md">
-                    Drag and drop your Samsung Health <strong className="text-electric-blue">.zip</strong> export file here, or drop individual <strong className="text-bright-green">.csv</strong> sheets.
+                    Drag and drop your <strong className="text-electric-blue">Samsung Health Unzipped Folder</strong> or the <strong className="text-bright-green">.zip</strong> export here.
                 </p>
             </div>
             <div className="flex flex-wrap justify-center gap-2 md:gap-4 mt-4">
@@ -233,7 +247,7 @@ export default function FileUploader() {
                     <FileType className="w-3 h-3" /> heart_rate.csv
                 </div>
                 <div className="flex items-center gap-1 text-xs text-gray-500 bg-black bg-opacity-50 px-2 py-1 rounded">
-                    <FileType className="w-3 h-3" /> sleep.csv
+                    <FileType className="w-3 h-3" /> sleep_stage.csv
                 </div>
             </div>
         </div>
