@@ -2,27 +2,35 @@
 
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { TrendingUp } from 'lucide-react';
+import { useHealthData } from '@/contexts/HealthDataContext';
+import { format } from 'date-fns';
 
-interface DaySummary {
-  create_time: string;
-  step_count: number;
-  active_time: number;
-  calorie: number;
-}
+export default function MacroTrendMatrix() {
+  const { daySummaries, timeframe } = useHealthData();
+  
+  // Apply timeframe filter
+  let daysToShow = 7;
+  if (timeframe === 'Monthly') daysToShow = 30;
+  if (timeframe === 'All-Time') daysToShow = daySummaries.length;
+  if (timeframe === 'Daily') daysToShow = 1;
 
-export default function MacroTrendMatrix({ data }: { data: DaySummary[] }) {
-  // Format last 7-14 days
-  const formattedData = data.slice(-14).map(item => ({
-    date: item.create_time ? item.create_time.split(' ')[0].substring(5) : '', // MM-DD
-    steps: item.step_count || 0,
-    calories: item.calorie || 0,
-  }));
+  const formattedData = daySummaries.slice(-daysToShow).map(item => {
+    let displayDate = item.date;
+    try {
+        if (item.date) displayDate = format(new Date(item.date), 'MM-dd');
+    } catch(e) {}
+    return {
+        date: displayDate,
+        steps: item.step_count || 0,
+        calories: item.calorie || 0,
+    }
+  });
 
   return (
     <div className="sci-fi-panel col-span-1 md:col-span-2 lg:col-span-3">
       <div className="flex items-center gap-2 mb-6">
         <TrendingUp className="text-bright-green w-6 h-6" />
-        <h2 className="text-xl font-bold uppercase tracking-wider text-white">Macro-Trend Matrix (Steps)</h2>
+        <h2 className="text-xl font-bold uppercase tracking-wider text-white">Macro-Trend Matrix (Steps) - {timeframe}</h2>
       </div>
       
       <div className="h-64 w-full">
@@ -47,7 +55,7 @@ export default function MacroTrendMatrix({ data }: { data: DaySummary[] }) {
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-500">No trend data available</div>
+          <div className="h-full flex items-center justify-center text-gray-500">No trend data available in upload</div>
         )}
       </div>
     </div>

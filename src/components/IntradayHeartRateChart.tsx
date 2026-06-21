@@ -3,18 +3,16 @@
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Heart } from 'lucide-react';
 import { format } from 'date-fns';
+import { useHealthData } from '@/contexts/HealthDataContext';
 
-interface HeartRateData {
-  create_time: string;
-  heart_rate: number;
-}
-
-export default function IntradayHeartRateChart({ data }: { data: HeartRateData[] }) {
+export default function IntradayHeartRateChart() {
+  const { heartRates } = useHealthData();
+  
   // Format data for chart
-  const formattedData = data.map(item => ({
-    time: format(new Date(item.create_time), 'HH:mm'),
+  const formattedData = heartRates.map(item => ({
+    time: item.start_time ? format(new Date(item.start_time), 'HH:mm') : '',
     bpm: item.heart_rate,
-  })).slice(-100); // Show last 100 points for demo if too many
+  })).slice(-100); // Show last 100 points for performance/demo
 
   return (
     <div className="sci-fi-panel col-span-1 md:col-span-2 lg:col-span-3">
@@ -51,7 +49,7 @@ export default function IntradayHeartRateChart({ data }: { data: HeartRateData[]
             </AreaChart>
           </ResponsiveContainer>
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-500">No heart rate data available</div>
+          <div className="h-full flex items-center justify-center text-gray-500">No heart rate data available in upload</div>
         )}
       </div>
     </div>

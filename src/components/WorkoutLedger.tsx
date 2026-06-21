@@ -1,15 +1,13 @@
+"use client";
+
 import { Dumbbell } from 'lucide-react';
+import { useHealthData } from '@/contexts/HealthDataContext';
 
-interface DaySummary {
-  create_time: string;
-  step_count: number;
-  active_time: number;
-  calorie: number;
-}
-
-export default function WorkoutLedger({ data }: { data: DaySummary[] }) {
+export default function WorkoutLedger() {
+  const { daySummaries } = useHealthData();
+  
   // We'll use day summaries with high active time as proxy for workouts for this ledger
-  const workouts = [...data].reverse().slice(0, 5); // Last 5 days
+  const workouts = [...daySummaries].reverse().slice(0, 5); // Last 5 days
 
   return (
     <div className="sci-fi-panel col-span-1 md:col-span-2">
@@ -28,9 +26,14 @@ export default function WorkoutLedger({ data }: { data: DaySummary[] }) {
             </tr>
           </thead>
           <tbody>
-            {workouts.map((w, i) => (
+            {workouts.map((w, i) => {
+              let displayDate = w.date;
+              if (displayDate && displayDate.includes(' ')) {
+                 displayDate = displayDate.split(' ')[0];
+              }
+              return (
               <tr key={i} className="border-b border-[var(--color-panel-border)] border-opacity-50 hover:bg-[rgba(255,255,255,0.02)] transition-colors">
-                <td className="py-4 text-sm text-gray-300">{w.create_time ? w.create_time.split(' ')[0] : 'Unknown'}</td>
+                <td className="py-4 text-sm text-gray-300">{displayDate || 'Unknown'}</td>
                 <td className="py-4 text-sm text-gray-300">
                   <span className="inline-block px-2 py-1 rounded bg-[rgba(57,255,20,0.1)] text-bright-green border border-[rgba(57,255,20,0.2)]">
                     {Math.floor((w.active_time || 0) / 60000)} mins
@@ -38,10 +41,10 @@ export default function WorkoutLedger({ data }: { data: DaySummary[] }) {
                 </td>
                 <td className="py-4 text-sm text-white font-medium text-right">{Math.floor(w.calorie || 0)} kcal</td>
               </tr>
-            ))}
+            )})}
             {workouts.length === 0 && (
               <tr>
-                <td colSpan={3} className="py-8 text-center text-gray-500 text-sm">No recent activity logged</td>
+                <td colSpan={3} className="py-8 text-center text-gray-500 text-sm">No activity data in upload</td>
               </tr>
             )}
           </tbody>
