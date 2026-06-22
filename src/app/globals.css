@@ -4,32 +4,46 @@
   --color-electric-blue: #00f0ff;
   --color-bright-green: #39ff14;
   --color-deep-violet: #8a2be2;
-  --color-dark-bg: #0a0a0c;
-  --color-panel-bg: rgba(20, 20, 25, 0.7);
-  --color-panel-border: rgba(255, 255, 255, 0.1);
-  --color-neon-glow-blue: rgba(0, 240, 255, 0.5);
+  
+  /* Cyberpunk Dark Palette */
+  --color-dark-bg: #09090b;
+  --color-panel-bg: rgba(24, 24, 27, 0.4); /* zinc-900/40 */
+  --color-panel-border: rgba(255, 255, 255, 0.05);
+  --color-neon-glow-blue: rgba(0, 240, 255, 0.3);
+  --color-neon-glow-green: rgba(57, 255, 20, 0.3);
+  --color-neon-glow-violet: rgba(138, 43, 226, 0.3);
 }
 
 @layer base {
   :root {
-    --background: #0a0a0c;
-    --foreground: #e0e0e0;
+    --background: #09090b;
+    --foreground: #f4f4f5;
   }
   
   body {
     background-color: var(--background);
     color: var(--foreground);
     font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    background-image: radial-gradient(circle at 50% 0%, rgba(20, 20, 30, 1) 0%, rgba(10, 10, 12, 1) 100%);
     min-height: 100vh;
+    /* Deep uniform dark instead of heavy radial gradient */
   }
 }
 
 @layer components {
   .sci-fi-panel {
-    @apply bg-[var(--color-panel-bg)] border border-[var(--color-panel-border)] rounded-xl backdrop-blur-md p-6 shadow-lg transition-all duration-300;
+    @apply bg-[var(--color-panel-bg)] border border-[var(--color-panel-border)] rounded-2xl backdrop-blur-xl p-6 shadow-xl transition-all duration-300;
   }
+  
+  /* Hover effects based on context (defaulting to blue) */
   .sci-fi-panel:hover {
-    @apply border-electric-blue shadow-[0_0_15px_var(--color-neon-glow-blue)];
+    @apply border-[rgba(255,255,255,0.15)] shadow-[0_0_20px_var(--color-neon-glow-blue)];
+  }
+  
+  .sci-fi-panel.hover-green:hover {
+    @apply shadow-[0_0_20px_var(--color-neon-glow-green)];
+  }
+  
+  .sci-fi-panel.hover-violet:hover {
+    @apply shadow-[0_0_20px_var(--color-neon-glow-violet)];
   }
 }

@@ -36,12 +36,14 @@ export default function Dashboard() {
       {isLoaded && (
         <>
           {/* Vital Rings Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <VitalSummaryRing 
               title="Daily Steps" 
               value={latestSummary.step_count || 0} 
               goal={10000} 
               color="var(--color-bright-green)" 
+              gradientId="grad-steps"
+              hoverClass="hover-green"
               unit="steps" 
               icon={<Footprints className="w-4 h-4 text-bright-green" />} 
             />
@@ -50,6 +52,8 @@ export default function Dashboard() {
               value={Math.floor(latestSummary.calorie || 0)} 
               goal={2500} 
               color="var(--color-electric-blue)" 
+              gradientId="grad-cal"
+              hoverClass="hover-blue"
               unit="kcal" 
               icon={<Flame className="w-4 h-4 text-electric-blue" />} 
             />
@@ -58,13 +62,15 @@ export default function Dashboard() {
               value={Math.floor((latestSummary.active_time || 0) / 60000)} 
               goal={60} 
               color="var(--color-deep-violet)" 
+              gradientId="grad-active"
+              hoverClass="hover-violet"
               unit="mins" 
               icon={<Zap className="w-4 h-4 text-deep-violet" />} 
             />
           </div>
 
           {/* Main Charts Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             <IntradayHeartRateChart />
             <MacroTrendMatrix />
             <SleepArchitectureChart />
